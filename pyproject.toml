@@ -1,0 +1,26 @@
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "fixed_employer_contribution"
+authors = [
+    { name = "thefunctionaldev", email = "thefunctionaldev@users.noreply.github.com" }
+]
+description = "Automated Employer PF contributions (EPF, EPS, EDLI, Admin Charges) on Salary Slips for Frappe HR India Payroll"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # Core dependencies managed by bench
+]
+
+[project.urls]
+Homepage = "https://github.com/thefunctionaldev/fixed_employer_contribution"
+Repository = "https://github.com/thefunctionaldev/fixed_employer_contribution"
+
+[project.license]
+text = "MIT"
+
+[tool.flit.module]
+name = "fixed_employer_contribution"
