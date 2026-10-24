@@ -1,5 +1,8 @@
 # Fixed Employer Contribution
 
+[![Frappe](https://img.shields.io/badge/frappe-v16-blue.svg)](https://frappeframework.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Automate Indian statutory employer PF contributions (Employer EPF, EPS, EDLI, and Admin Charges) directly on Salary Slips in **Frappe HR + India Payroll** (v16).
 
 ---
@@ -14,6 +17,7 @@ In standard Frappe HR + India Payroll, employee deductions for EPF and VPF are a
 3. Calculates **Employer EPF** (rounded 12% minus EPS, strictly following EPFO half-up rounding rules).
 4. Calculates **EDLI** (0.5% capped at wage ceiling) and **EPF Admin Charges** (0.5% on PF wage).
 5. Injects the 4 lines into the `Employer Contributions` table and updates total employer PF cost and credit on the draft Salary Slip.
+6. **High Performance**: Features in-memory request-level memoization to process thousands of slips in bulk Payroll Entries with zero $O(N)$ query bottlenecks.
 
 ---
 
@@ -56,6 +60,26 @@ Navigate to **Payroll Settings > India Payroll**:
 - **EPS Eligible**: Check if the employee is eligible for the EPS pension diversion (default: Yes).
 - **Contribute on Actual PF Wage**: Check if the employer contributes on the actual PF wage exceeding the ceiling under Para 26(6).
 - **Para 26(6) Joint Declaration on File**: Check when the joint declaration is on file.
+
+---
+
+## Uninstallation & Data Retention Policy
+
+If you uninstall the app:
+```bash
+bench --site <your-site> uninstall-app fixed_employer_contribution
+```
+- The app safely disconnects its `doc_events` hooks, returning Salary Slip creation to standard manual HRMS behavior.
+- **Historical Data Safety**: All past Salary Slips, submitted records, and Custom Fields are intentionally preserved in the database to safeguard financial audits and past ECR filing integrity.
+
+---
+
+## Running Tests
+
+To run the unit test suite:
+```bash
+python -m unittest fixed_employer_contribution/tests/test_employer_pf.py
+```
 
 ---
 

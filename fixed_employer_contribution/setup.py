@@ -37,6 +37,13 @@ def after_migrate():
 
 
 def before_uninstall():
+	"""Intentionally preserves custom fields and slip history.
+
+	Uninstalling the app detaches hooks from Salary Slip / SSA validation, returning
+	to standard manual HRMS behavior. Historical Salary Slips and statutory audit
+	records in the database are intentionally preserved so that financial audits,
+	ECR filings, and past payslip integrity are not broken or lost.
+	"""
 	pass
 
 
@@ -46,7 +53,12 @@ def set_employer_pf_defaults():
 	if not frappe.db:
 		return
 
-	stored = dict(frappe.db.sql("select field, value from `tabSingles` where doctype = 'Payroll Settings'"))
+	stored = {
+		row.field: row.value
+		for row in frappe.get_all(
+			"Singles", filters={"doctype": "Payroll Settings"}, fields=["field", "value"]
+		)
+	}
 	values = {field: value for field, value in DEFAULT_SETTINGS.items() if not stored.get(field)}
 	values.update(
 		{

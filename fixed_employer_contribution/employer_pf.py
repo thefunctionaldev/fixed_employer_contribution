@@ -213,33 +213,40 @@ def _is_pf_wage_row(e) -> bool:
 	return not e.get("additional_salary") and is_pf_wage_component(e.salary_component)
 
 
-def compute_pf_wage(doc) -> float:
+def compute_pf_wage(doc: Document) -> float:
 	try:
 		from india_payroll.india_payroll.epf import _compute_pf_wage as core_compute_pf
 		return core_compute_pf(doc)
 	except Exception:
-		return sum(flt(e.amount) for e in doc.earnings if _is_pf_wage_row(e))
+		return sum(flt(e.amount) for e in (doc.get("earnings") or []) if _is_pf_wage_row(e))
 
 
-def get_slip_ssa_values(doc, fields: list[str]) -> "frappe._dict":
+def get_slip_ssa_values(doc: Document, fields: list[str]) -> "frappe._dict":
 	try:
 		from india_payroll.india_payroll.utils import get_slip_ssa_values as core_get_ssa
 		return core_get_ssa(doc, fields)
 	except Exception:
-		row = frappe.db.get_value(
-			"Salary Structure Assignment",
-			filters={
-				"employee": doc.employee,
-				"company": doc.company,
-				"salary_structure": doc.salary_structure,
-				"from_date": ("<=", doc.end_date),
-				"docstatus": 1,
-			},
-			fieldname=fields,
-			order_by="from_date desc",
-			as_dict=True,
-		)
-		return row or frappe._dict()
+		cache = getattr(frappe.local, "fixed_epf_ssa_cache", None)
+		if cache is None:
+			cache = frappe.local.fixed_epf_ssa_cache = {}
+
+		cache_key = (doc.employee, doc.salary_structure, str(doc.end_date))
+		if cache_key not in cache:
+			row = frappe.db.get_value(
+				"Salary Structure Assignment",
+				filters={
+					"employee": doc.employee,
+					"company": doc.company,
+					"salary_structure": doc.salary_structure,
+					"from_date": ("<=", doc.end_date),
+					"docstatus": 1,
+				},
+				fieldname=fields,
+				order_by="from_date desc",
+				as_dict=True,
+			)
+			cache[cache_key] = row or frappe._dict()
+		return cache[cache_key]
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +273,7 @@ def get_settings() -> frappe._dict | None:
 
 def set_employer_pf_contributions(doc: Document, method: str | None = None) -> None:
 	"""Salary Slip validate: rebuild the four employer PF rows from the slip's earned PF wage."""
-	if doc.docstatus != 0:
+	if doc.docstatus != 0 or not doc.get("employee"):
 		return
 
 	settings = get_settings()
@@ -283,7 +290,11 @@ def set_employer_pf_contributions(doc: Document, method: str | None = None) -> N
 	if not is_applicable(doc, settings):
 		return
 
-	amounts = get_employer_pf_amounts(doc, settings)
+	pf_wage = compute_pf_wage(doc)
+	if pf_wage <= 0:
+		return
+
+	amounts = get_employer_pf_amounts(doc, settings, pf_wage=pf_wage)
 	for field, key in COMPONENT_FIELDS.items():
 		doc.append(
 			EMPLOYER_CONTRIBUTIONS,
@@ -314,10 +325,15 @@ def is_applicable(doc: Document, settings: frappe._dict) -> bool:
 	)
 
 
-def get_employer_pf_amounts(doc: Document, settings: frappe._dict) -> EmployerPFAmounts:
-	joining_date, relieving_date = frappe.get_cached_value(
-		"Employee", doc.employee, ["date_of_joining", "relieving_date"]
+def get_employer_pf_amounts(
+	doc: Document, settings: frappe._dict, pf_wage: float | None = None
+) -> EmployerPFAmounts:
+	employee_info = (
+		frappe.get_cached_value("Employee", doc.employee, ["date_of_joining", "relieving_date"])
+		if doc.get("employee")
+		else None
 	)
+	joining_date, relieving_date = employee_info or (None, None)
 	ceilings = get_ceiling_shares(
 		doc.start_date,
 		doc.end_date,
@@ -329,8 +345,10 @@ def get_employer_pf_amounts(doc: Document, settings: frappe._dict) -> EmployerPF
 	)
 	ssa = get_slip_ssa_values(doc, ["eps_eligible", "contribute_on_actual_pf_wage"])
 
+	wage_to_use = compute_pf_wage(doc) if pf_wage is None else pf_wage
+
 	return calculate_employer_pf(
-		compute_pf_wage(doc),
+		wage_to_use,
 		eps_eligible=bool(ssa.get("eps_eligible")),
 		contribute_on_actual=bool(ssa.get("contribute_on_actual_pf_wage")),
 		rates=settings.rates,
