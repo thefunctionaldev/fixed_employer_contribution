@@ -55,16 +55,29 @@ def set_employer_pf_defaults():
 
 	stored = {
 		row.field: row.value
-		for row in frappe.get_all(
-			"Singles", filters={"doctype": "Payroll Settings"}, fields=["field", "value"]
+		for row in frappe.db.sql(
+			"""
+			SELECT field, value
+			FROM `tabSingles`
+			WHERE doctype = %s
+			""",
+			("Payroll Settings",),
+			as_dict=True,
 		)
 	}
-	values = {field: value for field, value in DEFAULT_SETTINGS.items() if not stored.get(field)}
+
+	values = {
+		field: value
+		for field, value in DEFAULT_SETTINGS.items()
+		if not stored.get(field)
+	}
+
 	values.update(
 		{
 			field: component
 			for field, component in DEFAULT_COMPONENTS.items()
-			if not stored.get(field) and frappe.db.exists("Salary Component", component)
+			if not stored.get(field)
+			and frappe.db.exists("Salary Component", component)
 		}
 	)
 
